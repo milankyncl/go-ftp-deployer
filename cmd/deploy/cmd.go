@@ -27,9 +27,10 @@ func New() *Command {
 
 func (c *Command) Execute(rootDirectory string, config deployer.Config) {
 
-	c.progress.Set(color.FgHiWhite)
+	c.progress.Set(color.FgHiWhite, color.Bold)
 	c.progress.Message(fmt.Sprintf("Starting deploy at [%s]", c.start.Local().Format(time.RFC3339)))
 
+	c.progress.Set(color.Reset)
 	c.progress.Message("Connecting to server")
 	// TODO: Get host and credentials from deployment config
 	client, err := ftp.NewClient(config.Host, config.User, config.Password)
