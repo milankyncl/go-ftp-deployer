@@ -8,6 +8,7 @@ require (
 	github.com/mitchellh/mapstructure v1.3.0 // indirect
 	github.com/pelletier/go-toml v1.7.0 // indirect
 	github.com/secsy/goftp v0.0.0-20190720192957-f31499d7c79a
+	github.com/sirupsen/logrus v1.6.0 // indirect
 	github.com/spf13/afero v1.2.2 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/spf13/cobra v1.0.0
