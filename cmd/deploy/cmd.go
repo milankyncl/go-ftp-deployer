@@ -3,93 +3,82 @@ package deploy
 import (
 	"fmt"
 	"github.com/fatih/color"
-	"github.com/milankyncl/go-ftp-deployer/internal/client/ftp"
 	"github.com/milankyncl/go-ftp-deployer/internal/deployer"
-	"log"
-	"os"
+	"github.com/milankyncl/go-ftp-deployer/internal/deployer/worker"
 	"path"
-	"path/filepath"
-	"strings"
 	"time"
 )
 
-type Command struct {
-	start    time.Time
-	progress *deployer.Progress
-}
+func Execute(rootDirectory string, config deployer.Config) {
+	progress := deployer.NewProgress()
+	start := time.Now()
 
-func New() *Command {
-	return &Command{
-		start:    time.Now(),
-		progress: deployer.NewProgress(),
-	}
-}
+	progress.
+		Color(color.FgHiWhite, color.Bold).
+		Message(fmt.Sprintf("Starting deploy at [%s]", start.Local().Format(time.RFC3339)))
 
-func (c *Command) Execute(rootDirectory string, config deployer.Config) {
-
-	c.progress.Set(color.FgHiWhite, color.Bold)
-	c.progress.Message(fmt.Sprintf("Starting deploy at [%s]", c.start.Local().Format(time.RFC3339)))
-
-	c.progress.Set(color.Reset)
-	c.progress.Message("Connecting to server")
-	// TODO: Get host and credentials from deployment config
-	client, err := ftp.NewClient(config.Host, config.User, config.Password)
-	if err != nil {
-		log.Fatal("Could not create FTP connection", err)
-	}
-	defer client.Close()
-
-	c.progress.Set(color.FgGreen)
-	c.progress.Message("Successfully connected to FTP server")
-	c.progress.Message("")
+	wrkr := deployer.NewWorker(config, progress)
+	defer func() {
+		if r := recover(); r != nil {
+			progress.Color(color.FgWhite).Message("Something went wrong, disconnecting from server. Error:")
+			progress.Color(color.FgRed).Message(r)
+		}
+		progress.Color(color.Bold, color.FgHiWhite).Message("Disconnected from server.")
+		wrkr.Disconnect()
+	}()
 
 	// Running deploy check
+	lastSync, err := wrkr.LastSyncTime()
+	if err != nil {
+		panic(err)
+	}
+	if lastSync == nil {
+		progress.Color(color.FgWhite).Message("Deploying all contents")
+	}
 
 	// TODO: Think about some temporary file to serve content
 	// 		 for website (maintenance)
 
-	// TODO: Update to collect files first, then upload them
-	c.progress.Set(color.FgHiWhite)
-	c.progress.Message("Uploading:")
-	c.progress.Set(color.FgHiGreen)
-	deployPath := path.Join(rootDirectory, config.LocalPath)
-	err = filepath.Walk(
-		deployPath,
-		func(filepath string, file os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if filepath != deployPath {
-				extPath := strings.ReplaceAll(filepath, deployPath, "")
-				if file.IsDir() {
-					if client.FileExists(path.Join(config.ExtPath, extPath)) == false {
-						c.progress.Message("Creating directory ", extPath)
-						err = client.CreateDir(
-							path.Join(config.ExtPath, extPath),
-						)
-					}
-				} else {
-					c.progress.Message("[1/2]", extPath)
-					err = client.Upload(
-						filepath,
-						path.Join(config.ExtPath, extPath),
-					)
-				}
-				if err != nil {
-					return err
-				}
-			}
+	progress.Color(color.FgWhite).Message("Collecting files.")
 
-			return nil
-		})
-	if err != nil {
-		log.Fatal(err)
+	localPath := path.Join(rootDirectory, config.LocalPath)
+	paths := wrkr.CollectPaths(localPath)
+	toDep := make([]worker.Path, 0)
+
+	for _, p := range paths {
+		if lastSync == nil || lastSync.Before(p.Info().ModTime()) {
+			toDep = append(toDep, p)
+		}
 	}
 
-	c.progress.Message("")
+	progress.Message("")
+
+	if len(toDep) == 0 {
+		progress.Color(color.Bold, color.FgGreen).Message("Everything already synchronized!")
+		return
+	}
+
+	progress.Color(color.FgHiWhite).Message("Uploading:")
+	for i, p := range toDep {
+		progress.
+			Color(color.FgHiGreen).
+			Message(fmt.Sprintf("(%d/%d) %s", i+1, len(paths), p.Path()))
+		err := wrkr.Upload(path.Join(rootDirectory, config.LocalPath), p)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	// Save last sync
+	err = wrkr.UpdateLastSync()
+	if err != nil {
+		panic(err)
+	}
 
 	end := time.Now()
-	elapsed := end.Sub(c.start)
-	c.progress.Set(color.FgGreen, color.Bold)
-	c.progress.Message(fmt.Sprintf("Finished deploy at [%s] in %.2fs", end.Local().Format(time.RFC3339), elapsed.Seconds()))
+	elapsed := end.Sub(start)
+	progress.
+		Message().
+		Color(color.FgGreen, color.Bold).
+		Message(fmt.Sprintf("Finished deploy at [%s] in %.2fs", end.Local().Format(time.RFC3339), elapsed.Seconds()))
 }

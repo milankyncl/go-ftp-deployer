@@ -14,10 +14,17 @@ type Progress struct {
 	color *color.Color
 }
 
-func (p *Progress) Set(colors ...color.Attribute) {
+func (p *Progress) Color(colors ...color.Attribute) *Progress {
 	p.color = p.color.Add(colors...)
+	return p
 }
 
-func (p *Progress) Message(msg ...interface{}) {
+func (p *Progress) Reset() *Progress {
+	p.color = p.color.Add(color.Reset)
+	return p
+}
+
+func (p *Progress) Message(msg ...interface{}) *Progress {
 	_, _ = p.color.Println(msg...)
+	return p
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/milankyncl/go-ftp-deployer/cmd/deploy"
 	"github.com/milankyncl/go-ftp-deployer/internal/deployer"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"log"
@@ -25,7 +24,6 @@ const (
 )
 
 var (
-	logger     = logrus.New()
 	configFile = new(string)
 
 	rootCmd = &cobra.Command{
@@ -47,8 +45,7 @@ var (
 				log.Fatal(err)
 			}
 
-			dep := deploy.New()
-			dep.Execute(
+			deploy.Execute(
 				rootDir,
 				deployer.Config{
 					Host:      viper.GetString(configServerHost),
@@ -72,12 +69,6 @@ var (
 )
 
 func main() {
-	logger.SetFormatter(&logrus.TextFormatter{
-		DisableTimestamp: true,
-	})
-	logger.SetOutput(os.Stdout)
-	logger.SetLevel(logrus.DebugLevel)
-
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.AddCommand(
@@ -103,25 +94,15 @@ func initConfig() {
 	}
 
 	if err := viper.ReadInConfig(); err != nil {
-		logger.Fatalln(err)
+		log.Panic(err)
 	}
 }
 
 func config() {
-	configString(configServerHost, "", "FTP server host")
-	configString(configServerUser, "", "FTP username")
-	configString(configServerPassword, "", "FTP password")
-	configString(configLocalPath, "", "Local path of deployment root")
-	configString(configExternalPath, "", "External path for deployment")
-}
-
-func configString(key string, def string, usage string) {
-	viper.SetDefault(key, def)
-	rootCmd.PersistentFlags().StringP(key, "", def, usage)
-	err := viper.BindPFlag(key, rootCmd.PersistentFlags().Lookup(key))
-	if err != nil {
-		logger.WithError(err).
-			WithField("key", key).
-			Fatal("bind flag to config key")
-	}
+	viper.SetDefault(configServerHost, "")
+	viper.SetDefault(configServerHost, "")
+	viper.SetDefault(configServerUser, "")
+	viper.SetDefault(configServerPassword, "")
+	viper.SetDefault(configLocalPath, "")
+	viper.SetDefault(configExternalPath, "")
 }
